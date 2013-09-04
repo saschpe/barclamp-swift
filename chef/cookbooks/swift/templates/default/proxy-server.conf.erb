@@ -49,10 +49,10 @@ setup_console_handler = true
       @tempauth = true and !@hide_auth
   end
   middlewares = node[:swift][:middlewares].keys.select{|mw| node[:swift][:middlewares][mw][:enabled]}
-  ratelimit = middlewares.delete("ratelimit")
+  @ratelimit = middlewares.delete("ratelimit")
   auth = "swift3 s3token " + auth if middlewares.delete("s3")
 %>
-pipeline = catch_errors healthcheck cache <%= ratelimit %> <%= auth %> <%= middlewares.join(' ') %> proxy-logging proxy-server
+pipeline = catch_errors healthcheck cache <%= @ratelimit %> <%= auth %> <%= middlewares.join(' ') %> proxy-logging proxy-server
 
 [app:proxy-server]
 use = egg:swift#proxy
@@ -138,7 +138,7 @@ user_test_tester3 = testing3
 bind_ip = 0.0.0.0
 <% end %>
 
-
+<% if @ratelimit %>
 [filter:ratelimit]
 use = egg:swift#ratelimit
 clock_accuracy = <%= @clock_accuracy %>
@@ -150,6 +150,7 @@ account_whitelist = <%= @account_whitelist %>
 account_blacklist = <%= @account_blacklist %>
 <% @container_ratelimit_size.split(',').each do |limit| -%>
 <%=  "container_ratelimit_" + limit %>
+<% end -%>
 <% end -%>
 
 [filter:proxy-logging]
