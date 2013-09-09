@@ -59,3 +59,12 @@ template "/etc/swift/swift.conf" do
  })
 end
 
+if node[:platform] == "suse"
+  # Only rotate log-files 9 times (instead of 99)
+  template "/etc/logrotate.d/syslog" do
+    owner "root"
+    group "root"
+    mode "0644"
+    source "logrotate_d.syslog.conf"
+  end
+end
