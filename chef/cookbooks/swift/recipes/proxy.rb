@@ -101,20 +101,17 @@ if node[:swift][:middlewares][:s3][:enabled]
     if %w(redhat centos suse).include?(node.platform)
       package "python-swift3"
     else
-      package("swift-plugin-s3")
+      package "swift-plugin-s3"
     end
   end
 end
 
 case proxy_config[:auth_method]
    when "swauth"
-     package "python-swauth" do
-       action :install
-     end 
+     package "python-swauth"
      proxy_config[:admin_key] =node[:swift][:cluster_admin_pw]
 
    when "keystone" 
-
      env_filter = " AND keystone_config_environment:keystone-config-#{node[:swift][:keystone_instance]}"
      keystones = search(:node, "recipes:keystone\\:\\:server#{env_filter}") || []
      if keystones.length > 0
@@ -220,7 +217,6 @@ case proxy_config[:auth_method]
          #  endpoint_enabled true
         action :add_endpoint_template
     end
-
 
    when "tempauth"
      ## uses defaults...

@@ -55,89 +55,148 @@ log_level = <%= @debug? "DEBUG": "INFO" %>
 # client_timeout = 60
 # eventlet_debug = false
 
-[pipeline:main]
 <% 
-  @swauth = @tempauth = @keystone = false
   auth = ""
   case @auth_method
     when "swauth"
       auth = "swauth"
-      @swauth = true
     when "keystone"
       auth = "auth_token keystoneauth"
-      @keystone = true
     when "tempauth"
       auth = "tempauth"
-      @tempauth = true
   end
   middlewares = node[:swift][:middlewares].keys.select{|mw| node[:swift][:middlewares][mw][:enabled]}
   ratelimit = middlewares.delete("ratelimit")
   auth = "swift3 s3token " + auth if middlewares.delete("s3")
 %>
-pipeline = catch_errors healthcheck proxy-logging cache slo <%= ratelimit %> <% auth %> <%= middlewares.join(' ') %> container-quotas account-quotas proxy-logging proxy-server
+[pipeline:main]
+pipeline = catch_errors healthcheck proxy-logging cache bulk slo <%= ratelimit %> <% auth %> <%= middlewares.join(' ') %> container-quotas account-quotas proxy-logging proxy-server
 
 [app:proxy-server]
 use = egg:swift#proxy
-
+# You can override the default log routing for this app here:
+log_name = proxy-server
+log_facility = LOG_LOCAL5
+# set log_level = INFO
+# set log_address = /dev/log
+#
+# log_handoffs = true
+# recheck_account_existence = 60
+# recheck_container_existence = 60
+# object_chunk_size = 8192
+# client_chunk_size = 8192
+# node_timeout = 10
+# conn_timeout = 0.5
+#
+# How long without an error before a node's error count is reset. This will
+# also be how long before a node is reenabled after suppression is triggered.
+# error_suppression_interval = 60
+#
+# How many errors can accumulate before a node is temporarily ignored.
+# error_suppression_limit = 10
+#
 # If set to 'true' any authorized user may create and delete accounts; if
 # 'false' no one, even authorized, can.
 # allow_account_management = false
+#
+# Set object_post_as_copy = false to turn on fast posts where only the metadata
+# changes are stored anew and the original data file is kept in place. This
+# makes for quicker posts; but since the container metadata isn't updated in
+# this mode, features like container sync won't be able to sync posts.
+# object_post_as_copy = true
+#
+# If set to 'true' authorized accounts that do not yet exist within the Swift
+# cluster will be automatically created.
+<% if @auth_method == "keystone" %>account_autocreate = true<% end %>
+#
+# If set to a positive value, trying to create a container when the account
+# already has at least this maximum containers will result in a 403 Forbidden.
+# Note: This is a soft limit, meaning a user might exceed the cap for
+# recheck_account_existence before the 403s kick in.
+# max_containers_per_account = 0
+#
+# This is a comma separated list of account hashes that ignore the
+# max_containers_per_account cap.
+# max_containers_whitelist =
+#
+# Comma separated list of Host headers to which the proxy will deny requests.
+# deny_host_headers =
+#
+# Prefix used when automatically creating accounts.
+# auto_create_account_prefix = .
+#
+# Depth of the proxy put queue.
+# put_queue_depth = 10
+#
+# Start rate-limiting object segment serving after the Nth segment of a
+# segmented object.
+# rate_limit_after_segment = 10
+#
+# Once segment rate-limiting kicks in for an object, limit segments served
+# to N per second.
+# rate_limit_segments_per_sec = 1
+#
+# Storage nodes can be chosen at random (shuffle), by using timing
+# measurements (timing), or by using an explicit match (affinity).
+# Using timing measurements may allow for lower overall latency, while
+# using affinity allows for finer control. In both the timing and
+# affinity cases, equally-sorting nodes are still randomly chosen to
+# spread load.
+# The valid values for sorting_method are "affinity", "shuffle", and "timing".
+# sorting_method = shuffle
+#
+# If the "timing" sorting_method is used, the timings will only be valid for
+# the number of seconds configured by timing_expiry.
+# timing_expiry = 300
+#
+# If set to false will treat objects with X-Static-Large-Object header set
+# as a regular object on GETs, i.e. will return that object's contents. Should
+# be set to false if slo is not used in pipeline.
+# allow_static_large_object = true
+#
+# The maximum time (seconds) that a large object connection is allowed to last.
+# max_large_object_get_time = 86400
+#
+# Set to the number of nodes to contact for a normal request. You can use
+# '* replicas' at the end to have it use the number given times the number of
+# replicas for the ring being used for the request.
+# request_node_count = 2 * replicas
+#
+# Which backend servers to prefer on reads. Format is r<N> for region
+# N or r<N>z<M> for region N, zone M. The value after the equals is
+# the priority; lower numbers are higher priority.
+#
+# Example: first read from region 1 zone 1, then region 1 zone 2, then
+# anything in region 2, then everything else:
+# read_affinity = r1z1=100, r1z2=200, r2=300
+# Default is empty, meaning no preference.
+# read_affinity =
+#
+# Which backend servers to prefer on writes. Format is r<N> for region
+# N or r<N>z<M> for region N, zone M. If this is set, then when
+# handling an object PUT request, some number (see setting
+# write_affinity_node_count) of local backend servers will be tried
+# before any nonlocal ones.
+#
+# Example: try to write to regions 1 and 2 before writing to any other
+# nodes:
+# write_affinity = r1, r2
+# Default is empty, meaning no preference.
+# write_affinity =
+#
+# The number of local (as governed by the write_affinity setting)
+# nodes to attempt to contact first, before any non-local ones. You
+# can use '* replicas' at the end to have it use the number given
+# times the number of replicas for the ring being used for the
+# request.
+# write_affinity_node_count = 2 * replicas
+#
+# These are the headers whose values will only be shown to swift_owners. The
+# exact definition of a swift_owner is up to the auth system in use, but
+# usually indicates administrative responsibilities.
+# swift_owner_headers = x-container-read, x-container-write, x-container-sync-key, x-container-sync-to, x-account-meta-temp-url-key, x-account-meta-temp-url-key-2
 
-<% if @keystone %>account_autocreate = true<% end %>
-log_name = proxy-server
-log_facility = LOG_LOCAL5
-access_log_name = proxy-server
-access_log_facility = LOG_LOCAL1
-access_log_level = INFO
-log_headers = true
-log_requests = true
 
-[filter:swift3]
-use = egg:swift3#swift3
-
-<%if @swauth %>
-[filter:swauth]
-use = egg:swauth#swauth
-set default_swift_cluster = local#https://<%= @admin_host %>:8080/v1
-super_admin_key = <%= @admin_key %>
-<% end %>
-
-<% if @keystone %>
-[filter:keystoneauth]
-use = egg:swift#keystoneauth
-operator_roles = Member,admin
-reseller_prefix=<%= @reseller_prefix %>
-
-# NOTE(chmou): s3token middleware is not updated yet to use only
-# username and password.
-[filter:s3token]
-paste.filter_factory = keystone.middleware.s3_token:filter_factory
-service_port = <%= @keystone_service_port %>
-service_host = <%= @keystone_host %>
-auth_port = <%= @keystone_admin_port %>
-auth_host = <%= @keystone_host %>
-auth_protocol = <%= @keystone_protocol %>
-auth_token = <%= @keystone_admin_token %>
-admin_token = <%= @keystone_admin_token %>
-
-[filter:auth_token]
-# Delaying the auth decision is required to support token-less
-# usage for anonymous referrers ('.r:*').
-# delay_auth_decision = true
-delay_auth_decision = <%= @keystone_delay_auth_decision %>
-
-paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
-auth_host = <%= @keystone_host %>
-auth_port = <%= @keystone_admin_port %>
-auth_protocol = <%= @keystone_protocol %>
-auth_uri = <%= @keystone_protocol %>://<%= @keystone_host %>:<%= @keystone_service_port %>/
-admin_tenant_name = <%= @keystone_service_tenant %>
-admin_user = <%= @keystone_service_user %>
-admin_password = <%= @keystone_service_password %>
-signing_dir = /var/cache/swift/
-<% end %>
-
-<% if @tempauth %>
 [filter:tempauth]
 use = egg:swift#tempauth
 # You can override the default log routing for this filter here:
@@ -188,7 +247,6 @@ user_admin_admin = admin .admin .reseller_admin
 user_test_tester = testing .admin
 user_test2_tester2 = testing2 .admin
 user_test_tester3 = testing3
-<% end %>
 
 # To enable Keystone authentication you need to have the auth token
 # middleware first to be configured. Here is an example below, please
@@ -199,20 +257,20 @@ user_test_tester3 = testing3
 # and have it in your main pipeline so instead of having tempauth in
 # there you can change it to: authtoken keystoneauth
 #
-# [filter:authtoken]
-# paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
-# auth_host = keystonehost
-# auth_port = 35357
-# auth_protocol = http
-# auth_uri = http://keystonehost:5000/
-# admin_tenant_name = service
-# admin_user = swift
-# admin_password = password
-# delay_auth_decision = 1
-# cache = swift.cache
-#
-# [filter:keystoneauth]
-# use = egg:swift#keystoneauth
+[filter:authtoken]
+paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
+auth_host = <%= @keystone_host %>
+auth_port = <%= @keystone_admin_port %>
+auth_protocol = <%= @keystone_protocol %>
+auth_uri = <%= @keystone_protocol %>://<%= @keystone_host %>:<%= @keystone_service_port %>/
+admin_tenant_name = <%= @keystone_service_tenant %>
+admin_user = <%= @keystone_service_user %>
+admin_password = <%= @keystone_service_password %>
+delay_auth_decision = <%= @keystone_delay_auth_decision %>
+ache = swift.cache
+
+[filter:keystoneauth]
+use = egg:swift#keystoneauth
 # Operator roles is the role which user would be allowed to manage a
 # tenant and be able to create container or give ACL to others.
 # operator_roles = admin, swiftoperator
@@ -292,6 +350,12 @@ account_blacklist = <%= @account_blacklist %>
 <% @container_ratelimit_size.split(',').each do |limit| -%>
 <%=  "container_ratelimit_" + limit %>
 <% end -%>
+
+# Similarly to the above container-level write limits, the following will limit
+# container GET (listing) requests.
+# container_listing_ratelimit_0 = 100
+# container_listing_ratelimit_10 = 50
+# container_listing_ratelimit_50 = 20
 
 [filter:domain_remap]
 use = egg:swift#domain_remap
@@ -378,9 +442,9 @@ use = egg:swift#list_endpoints
 [filter:proxy-logging]
 use = egg:swift#proxy_logging
 # If not set, logging directives from [DEFAULT] without "access_" will be used
-# access_log_name = swift
-# access_log_facility = LOG_LOCAL0
-# access_log_level = INFO
+access_log_name = proxy-server
+access_log_facility = LOG_LOCAL1
+access_log_level = INFO
 # access_log_address = /dev/log
 #
 # If set, access_log_udp_host will override access_log_address
@@ -393,7 +457,7 @@ use = egg:swift#proxy_logging
 # access_log_statsd_default_sample_rate = 1.0
 # access_log_statsd_sample_rate_factor = 1.0
 # access_log_statsd_metric_prefix =
-# access_log_headers = false
+access_log_headers = true
 #
 # By default, the X-Auth-Token is logged. To obscure the value,
 # set reveal_sensitive_prefix to the number of characters to log.
@@ -438,3 +502,22 @@ use = egg:swift#slo
 
 [filter:account-quotas]
 use = egg:swift#account_quotas
+
+
+[filter:swift3]
+use = egg:swift3#swift3
+
+[filter:swauth]
+use = egg:swauth#swauth
+set default_swift_cluster = local#https://<%= @admin_host %>:8080/v1
+super_admin_key = <%= @admin_key %>
+
+[filter:s3token]
+paste.filter_factory = keystone.middleware.s3_token:filter_factory
+service_port = <%= @keystone_service_port %>
+service_host = <%= @keystone_host %>
+auth_port = <%= @keystone_admin_port %>
+auth_host = <%= @keystone_host %>
+auth_protocol = <%= @keystone_protocol %>
+auth_token = <%= @keystone_admin_token %>
+admin_token = <%= @keystone_admin_token %>
