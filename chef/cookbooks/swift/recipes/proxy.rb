@@ -156,7 +156,6 @@ case proxy_config[:auth_method]
      proxy_config[:keystone_service_tenant] = keystone_service_tenant
      proxy_config[:keystone_service_user] = keystone_service_user
      proxy_config[:keystone_service_password] = keystone_service_password
-     proxy_config[:reseller_prefix] = node[:swift][:reseller_prefix]
      proxy_config[:keystone_delay_auth_decision] = keystone_delay_auth_decision
 
      # ResellerAdmin is used by swift (see reseller_admin_role option)
@@ -210,9 +209,9 @@ case proxy_config[:auth_method]
          port keystone_admin_port
          endpoint_service "swift"
          endpoint_region "RegionOne"
-         endpoint_publicURL "https://#{public_host}:8080/v1/#{node[:swift][:reseller_prefix]}$(tenant_id)s"
+         endpoint_publicURL "https://#{public_host}:8080/v1/AUTH_$(tenant_id)s"
          endpoint_adminURL "https://#{admin_host}:8080/v1/"
-         endpoint_internalURL "https://#{admin_host}:8080/v1/#{node[:swift][:reseller_prefix]}$(tenant_id)s"
+         endpoint_internalURL "https://#{admin_host}:8080/v1/AUTH_$(tenant_id)s"
          #  endpoint_global true
          #  endpoint_enabled true
         action :add_endpoint_template
