@@ -238,7 +238,7 @@ execute "create auth cert" do
   user node[:swift][:user]
   command <<-EOH
   /usr/bin/openssl req -new -x509 -days 365 -nodes -out cert.crt -keyout cert.key -batch &>/dev/null 0</dev/null
-  chmod 640 cert.key
+  chmod 640 cert.key -subj '/C=US/ST=Unset/L=Unset/O=Unset/CN=#{node[:fqdn]}'
   EOH
   not_if  {::File.exist?("/etc/swift/cert.crt") } 
 end
